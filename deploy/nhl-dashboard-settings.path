@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for NHL Dashboard settings changes
+
+[Path]
+PathChanged=/var/lib/nhl-dashboard/settings.json
+Unit=nhl-dashboard-settings.service
+
+[Install]
+WantedBy=multi-user.target

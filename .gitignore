@@ -1,0 +1,13 @@
+.env
+deploy/local.env
+.venv/
+__pycache__/
+*.py[cod]
+*.log
+*.pid
+*.lock
+data/
+playoff_bracket_*.json
+CYD-Board-Software/secrets.h
+CYD-PlatformIO/include/secrets.h
+.pytest_cache/

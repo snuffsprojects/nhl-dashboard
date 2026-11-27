@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ dashboard.teamAbbrev }} Season Stats</title>
+    <style>
+        :root { --bg:#121212; --card:#1e1e1e; --gold:#b4975a; --text:#e0e0e0; --muted:#a0a0a0; --border:#2d2d2d; --win:#2e7559; --loss:#a83232; }
+        * { box-sizing: border-box; }
+        body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:2rem; }
+        .container { max-width:1100px; margin:0 auto; }
+        header { display:flex; justify-content:space-between; align-items:flex-end; gap:1rem; border-bottom:2px solid var(--gold); padding-bottom:1rem; margin-bottom:1.5rem; }
+        h1,h2 { margin:0; } h2 { margin:2rem 0 1rem; font-size:1.2rem; color:var(--gold); }
+        .subtitle,.muted { color:var(--muted); }
+        .nav-link,.season-tab { color:var(--text); border:1px solid var(--gold); background:transparent; padding:.65rem 1rem; border-radius:6px; text-decoration:none; font:inherit; font-weight:700; cursor:pointer; }
+        .season-tabs { display:flex; flex-wrap:wrap; gap:.65rem; margin-bottom:1.5rem; }
+        .season-tab.active { color:#111; background:var(--gold); }
+        .season-panel { display:none; } .season-panel.active { display:block; }
+        .scope-tabs { display:flex; flex-wrap:wrap; gap:.5rem; margin:0 0 1.2rem; }
+        .scope-tab { color:var(--muted); border:1px solid var(--border); background:var(--card); padding:.55rem .85rem; border-radius:999px; font:inherit; font-size:.85rem; font-weight:700; cursor:pointer; }
+        .scope-tab.active { color:#111; background:var(--gold); border-color:var(--gold); }
+        .stats-view { display:none; } .stats-view.active { display:block; }
+        .summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:.8rem; }
+        .stat-card,.panel { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:1rem; }
+        .stat-label {
+            color:var(--muted); text-transform:uppercase; font-size:.72rem;
+            letter-spacing:.05em; line-height:1.35; min-height:2.7em;
+        }
+        .stat-value {
+            color:var(--gold); font-size:clamp(1.3rem, 1.8vw, 1.55rem);
+            font-weight:800; line-height:1.15; margin-top:.3rem; white-space:nowrap;
+        }
+        .split-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:1rem; }
+        .split-title { font-weight:800; margin-bottom:.45rem; }
+        .record { font-size:1.35rem; font-weight:800; } .record span { color:var(--muted); font-size:.8rem; font-weight:500; }
+        .form-strip { display:flex; flex-wrap:wrap; gap:.45rem; margin-top:.8rem; }
+        .result { display:flex; width:42px; height:42px; align-items:center; justify-content:center; border-radius:50%; font-weight:900; background:var(--loss); }
+        .result.W { background:var(--win); } .result.OTL { background:#755f2e; }
+        .table-wrap { overflow-x:auto; background:var(--card); border:1px solid var(--border); border-radius:8px; }
+        table { width:100%; border-collapse:collapse; min-width:650px; }
+        th,td { padding:.7rem .8rem; text-align:right; border-bottom:1px solid var(--border); }
+        th { color:var(--muted); font-size:.72rem; text-transform:uppercase; } th:first-child,td:first-child { text-align:left; }
+        tr:last-child td { border-bottom:0; }
+        .goal-bars { display:grid; gap:.75rem; }
+        .goal-row { display:grid; grid-template-columns:120px 1fr 1fr; align-items:center; gap:.7rem; }
+        .bar-track { height:26px; background:#282828; border-radius:4px; overflow:hidden; position:relative; }
+        .bar { height:100%; display:flex; align-items:center; padding:0 .5rem; min-width:2rem; font-size:.75rem; font-weight:800; }
+        .bar.gf { background:var(--win); } .bar.ga { background:var(--loss); }
+        .legend { color:var(--muted); font-size:.75rem; margin:.6rem 0 0; }
+        .empty { padding:2rem; text-align:center; color:var(--muted); background:var(--card); border:1px dashed var(--border); border-radius:8px; }
+        @media (max-width:650px) { body{padding:1rem}.goal-row{grid-template-columns:90px 1fr}.goal-row .bar-track:last-child{grid-column:2} header{align-items:flex-start;flex-direction:column} }
+    </style>
+    <style>:root{--gold:{{ dashboard.primaryColor }};--team-secondary:{{ dashboard.accentColor }};--team-highlight:{{ dashboard.tertiaryColor }}}body{background:radial-gradient(circle at 85% -10%,color-mix(in srgb,var(--team-secondary) 18%,transparent),transparent 30rem),radial-gradient(circle at 8% 100%,color-mix(in srgb,var(--team-highlight) 10%,transparent),transparent 28rem),var(--bg)}</style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <div><h1>{{ dashboard.teamAbbrev }} Season Stats</h1><div class="subtitle">Results, trends and season splits</div></div>
+        <a class="nav-link" href="{{ url_for('index') }}">Back to Games</a>
+    </header>
+    <div class="season-tabs" role="tablist">
+        <button class="season-tab{% if default_season == 'current' %} active{% endif %}" onclick="showSeason('current')">{{ dashboard.seasonId[:4] }}–{{ dashboard.seasonId[6:] }}</button>
+        <button class="season-tab{% if default_season == 'historical' %} active{% endif %}" onclick="showSeason('historical')">Historical {{ dashboard.historicalSeasonId[:4] }}–{{ dashboard.historicalSeasonId[6:] }}</button>
+    </div>
+
+    {% macro record(summary) -%}{{ summary.wins }}–{{ summary.losses }}{% if summary.otl %}–{{ summary.otl }}{% endif %}{%- endmacro %}
+    {% macro stats_view(season_name, scope_name, view, active=false) %}
+    <div id="{{ season_name }}-{{ scope_name }}-view" class="stats-view{% if active %} active{% endif %}">
+        {% if view.overall.games %}
+        <div class="summary-grid">
+            <div class="stat-card"><div class="stat-label">Games</div><div class="stat-value">{{ view.overall.games }}</div></div>
+            <div class="stat-card"><div class="stat-label">{{ view.label }} record</div><div class="stat-value">{{ record(view.overall) }}</div></div>
+            {% if view.points_apply %}<div class="stat-card"><div class="stat-label">Points</div><div class="stat-value">{{ view.overall.points }}</div></div>{% endif %}
+            <div class="stat-card"><div class="stat-label">Win rate</div><div class="stat-value">{{ view.overall.win_pct }}%</div></div>
+            <div class="stat-card"><div class="stat-label">Goals for</div><div class="stat-value">{{ view.overall.goals_for }}</div></div>
+            <div class="stat-card"><div class="stat-label">Goals against</div><div class="stat-value">{{ view.overall.goals_against }}</div></div>
+            <div class="stat-card"><div class="stat-label">Goal difference</div><div class="stat-value">{{ '%+d'|format(view.overall.goal_diff) }}</div></div>
+        </div>
+
+        <h2>{{ view.label }} Splits</h2>
+        <div class="split-grid">
+            {% for split in [view.home, view.away, view.recent] %}
+            <div class="panel"><div class="split-title">{{ split.label }}</div><div class="record">{{ record(split) }} <span>{{ split.games }} GP</span></div><div class="muted">{{ split.goals_for }} GF · {{ split.goals_against }} GA · {{ split.win_pct }}%</div></div>
+            {% endfor %}
+        </div>
+
+        <h2>Recent Form</h2>
+        <div class="panel"><div>Last {{ view.recent_results|length }} {{ view.label|lower }} games</div><div class="form-strip">{% for game in view.recent_results %}<span class="result {{ game.result }}" title="{{ game.date }} vs {{ game.opponent }}: {{ game.goals_for }}–{{ game.goals_against }}">{{ game.result }}</span>{% endfor %}</div></div>
+
+        <h2>Notable Numbers</h2>
+        <div class="summary-grid">
+            <div class="stat-card"><div class="stat-label">Longest win streak</div><div class="stat-value">{{ view.longest_win_streak }}</div></div>
+            <div class="stat-card"><div class="stat-label">Longest losing streak</div><div class="stat-value">{{ view.longest_losing_streak }}</div></div>
+            <div class="stat-card"><div class="stat-label">One-goal games</div><div class="stat-value">{{ view.one_goal_games }}</div></div>
+            <div class="stat-card"><div class="stat-label">OT / shootout</div><div class="stat-value">{{ view.overtime_games }}</div></div>
+            <div class="stat-card"><div class="stat-label">{{ dashboard.teamAbbrev }} shutouts</div><div class="stat-value">{{ view.shutouts_for }}</div></div>
+            <div class="stat-card"><div class="stat-label">Shut out</div><div class="stat-value">{{ view.shutouts_against }}</div></div>
+        </div>
+
+        <h2>Goals by Month</h2>
+        <div class="panel goal-bars">
+            {% for month in view.months %}
+            <div class="goal-row"><strong>{{ month.label }}</strong><div class="bar-track"><div class="bar gf" style="width:{{ [month.goals_for / 50 * 100, 100]|min }}%">{{ month.goals_for }} GF</div></div><div class="bar-track"><div class="bar ga" style="width:{{ [month.goals_against / 50 * 100, 100]|min }}%">{{ month.goals_against }} GA</div></div></div>
+            {% endfor %}
+            <div class="legend">Green: goals for · Red: goals against</div>
+        </div>
+
+        <h2>Record by Opponent — {{ view.label }}</h2>
+        <div class="table-wrap"><table><thead><tr><th>Opponent</th><th>GP</th><th>Record</th><th>GF</th><th>GA</th><th>Diff</th><th>Win %</th></tr></thead><tbody>{% for opponent in view.opponents %}<tr><td>{{ opponent.label }}</td><td>{{ opponent.games }}</td><td>{{ record(opponent) }}</td><td>{{ opponent.goals_for }}</td><td>{{ opponent.goals_against }}</td><td>{{ '%+d'|format(opponent.goal_diff) }}</td><td>{{ opponent.win_pct }}%</td></tr>{% endfor %}</tbody></table></div>
+        {% else %}<div class="empty">No completed {{ view.label|lower }} games are available for this season.</div>{% endif %}
+    </div>
+    {% endmacro %}
+
+    {% macro season_panel(name, stats) %}
+    <section id="{{ name }}-panel" class="season-panel{% if default_season == name %} active{% endif %}">
+        <div class="scope-tabs" aria-label="Competition filter">
+            <button class="scope-tab active" onclick="showScope('{{ name }}', 'regular', this)">Regular Season</button>
+            <button class="scope-tab" onclick="showScope('{{ name }}', 'playoffs', this)">Playoffs</button>
+            <button class="scope-tab" onclick="showScope('{{ name }}', 'combined', this)">Combined</button>
+        </div>
+        {{ stats_view(name, 'regular', stats.views.regular, true) }}
+        {{ stats_view(name, 'playoffs', stats.views.playoffs) }}
+        {{ stats_view(name, 'combined', stats.views.combined) }}
+    </section>
+    {% endmacro %}
+    {{ season_panel('current', current_stats) }}
+    {{ season_panel('historical', historical_stats) }}
+</div>
+<script>
+function showSeason(name) {
+    document.querySelectorAll('.season-panel').forEach(panel => panel.classList.toggle('active', panel.id === `${name}-panel`));
+    document.querySelectorAll('.season-tab').forEach((tab, index) => tab.classList.toggle('active', (name === 'current' && index === 0) || (name === 'historical' && index === 1)));
+}
+function showScope(season, scope, button) {
+    const panel = document.getElementById(`${season}-panel`);
+    panel.querySelectorAll('.stats-view').forEach(view => view.classList.toggle('active', view.id === `${season}-${scope}-view`));
+    panel.querySelectorAll('.scope-tab').forEach(tab => tab.classList.toggle('active', tab === button));
+}
+</script>
+</body>
+</html>

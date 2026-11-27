@@ -1,0 +1,10 @@
+[Unit]
+Description=Apply NHL Dashboard settings
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 2
+ExecStart=/usr/bin/systemctl stop nhl-dashboard-sync.service
+ExecStart=/opt/nhl-dashboard/.venv/bin/python /opt/nhl-dashboard/cache_maintenance.py --if-requested
+ExecStart=/usr/bin/systemctl try-restart nhl-dashboard.service
+ExecStart=/usr/bin/systemctl start nhl-dashboard-sync.service

@@ -1,0 +1,22 @@
+[Unit]
+Description=Generic NHL Dashboard schedule synchronizer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+Group=pi
+WorkingDirectory=/opt/nhl-dashboard
+EnvironmentFile=-/etc/nhl-dashboard.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/nhl-dashboard/.venv/bin/python sync.py
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/nhl-dashboard
+
+[Install]
+WantedBy=multi-user.target

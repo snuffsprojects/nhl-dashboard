@@ -1,0 +1,22 @@
+[Unit]
+Description=Generic NHL Dashboard web application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+Group=pi
+WorkingDirectory=/opt/nhl-dashboard
+EnvironmentFile=-/etc/nhl-dashboard.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/nhl-dashboard/.venv/bin/gunicorn --no-control-socket --bind 127.0.0.1:5055 --workers 2 --threads 2 --timeout 30 app:app
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/nhl-dashboard
+
+[Install]
+WantedBy=multi-user.target

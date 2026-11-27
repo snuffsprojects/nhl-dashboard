@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0e1110">
+  <title>NHL Standings · {{ dashboard.siteName }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='standings.css') }}">
+  <style>:root{--gold:{{ dashboard.primaryColor }};--accent:{{ dashboard.accentColor }};--team-highlight:{{ dashboard.tertiaryColor }}}body{background:radial-gradient(circle at 82% -5%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 31rem),radial-gradient(circle at 8% 100%,color-mix(in srgb,var(--team-highlight) 10%,transparent),transparent 28rem),var(--page)}</style>
+</head>
+<body data-team="{{ dashboard.teamAbbrev }}" data-team-name="{{ dashboard.teamName }}" data-root="{{ request.script_root }}">
+  <a class="skip-link" href="#standings">Skip to standings</a>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('index') }}"><span class="brand-mark">{{ dashboard.teamMark }}</span><span><strong>{{ dashboard.siteName }}</strong><small>NHL standings</small></span></a>
+    <nav><a href="{{ url_for('index') }}">{{ dashboard.teamAbbrev }} Games</a><a href="{{ url_for('playoffs_page') }}">Stanley Cup</a><a href="{{ dashboard.backUrl }}">{{ dashboard.backLabel }}</a></nav>
+  </header>
+  <main>
+    <section class="hero">
+      <div><p class="eyebrow">Across the league</p><h1>NHL <em>Standings</em></h1><p>Every conference and division, with {{ dashboard.teamShortName }} kept firmly in view.</p></div>
+      <button id="refresh" type="button">Refresh standings</button>
+    </section>
+    <section id="team-summary" class="vgk-summary" aria-live="polite"><div class="skeleton">Finding {{ dashboard.teamLocation }} in the pack…</div></section>
+    <div class="standings-heading"><div><p class="eyebrow">Full league table</p><h2>Conference standings</h2></div><p id="updated">Contacting the NHL…</p></div>
+    <section id="standings" class="conference-grid" aria-live="polite"><div class="loading">Loading all 32 teams…</div></section>
+  </main>
+  <footer><span>Official standings data supplied by NHL.com</span><span>{{ dashboard.teamAbbrev }} rows use the configured highlight colour</span></footer>
+  <script src="{{ url_for('static', filename='standings.js') }}"></script>
+</body>
+</html>

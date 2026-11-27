@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ dashboard.siteName }}</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --accent-gold: #b4975a;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --border-color: #2d2d2d;
+            --modal-overlay: rgba(0, 0, 0, 0.85);
+
+            --win-glow: rgba(46, 117, 89, 0.25);
+            --win-border: #2e7559;
+            --loss-glow: rgba(168, 50, 50, 0.2);
+            --loss-border: #a83232;
+            --gold-live: #ffd700;
+            --silver-next: #c0c0c0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 2rem;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        header {
+            position: relative; min-height: 76px; padding: 0 94px 1rem 0;
+            border-bottom: 2px solid var(--accent-gold); margin-bottom: 2rem;
+        }
+        header::after {
+            content: ""; position: absolute; top: 0; right: 0; width: 72px; height: 72px;
+            background: url('https://assets.nhle.com/logos/nhl/svg/{{ dashboard.teamAbbrev }}_dark.svg') center / contain no-repeat;
+            filter: drop-shadow(0 6px 12px rgba(0,0,0,.45));
+        }
+        h1 { margin: 0; font-size: 2rem; letter-spacing: 0.5px; }
+        .subtitle { color: var(--text-muted); margin-top: 0.3rem; }
+
+        .grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+
+        .season-tabs { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-bottom: 1.25rem; }
+        .season-tab {
+            appearance: none; background: #1a1a1a; color: var(--text-muted);
+            border: 1px solid var(--border-color); border-radius: 6px;
+            padding: 0.7rem 1rem; font: inherit; font-weight: 700; cursor: pointer;
+        }
+        .season-tab:hover { color: var(--text-main); border-color: var(--accent-gold); }
+        .season-tab.active { background: var(--accent-gold); color: #111; border-color: var(--accent-gold); }
+        .season-panel { display: none; }
+        .season-panel.active { display: block; }
+        .empty-season {
+            background: var(--card-bg); border: 1px dashed var(--border-color);
+            border-radius: 8px; color: var(--text-muted); padding: 2rem;
+            text-align: center;
+        }
+
+        .game-card {
+            background-color: var(--card-bg); border: 2px solid var(--border-color);
+            border-radius: 8px; padding: 1.25rem; cursor: pointer; transition: transform 0.2s;
+            position: relative; overflow: hidden; isolation: isolate;
+        }
+        .game-card::before, .game-card::after {
+            content: ""; position: absolute; top: 0; height: 190px; width: 42%;
+            background-repeat: no-repeat; background-size: contain;
+            opacity: 0.12; pointer-events: none; z-index: -1;
+        }
+        .game-card::before {
+            left: 1rem; background-image: var(--away-logo); background-position: left center;
+        }
+        .game-card::after {
+            right: 1rem; background-image: var(--home-logo); background-position: right center;
+        }
+        .game-card > * { position: relative; z-index: 1; }
+        .game-card:hover { transform: scale(1.005); }
+
+        .outcome-win { background-color: var(--win-glow); border-color: var(--win-border); }
+        .outcome-loss { background-color: var(--loss-glow); border-color: var(--loss-border); }
+        .border-live { border-color: var(--gold-live) !important; box-shadow: 0 0 12px rgba(255, 215, 0, 0.3); animation: pulse-gold 2s infinite alternate; }
+        .border-next { border-color: var(--silver-next) !important; box-shadow: 0 0 8px rgba(192, 192, 192, 0.2); }
+
+        @keyframes pulse-gold { from { box-shadow: 0 0 6px rgba(255, 215, 0, 0.2); } to { box-shadow: 0 0 14px rgba(255, 215, 0, 0.4); } }
+
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+        .date-tag { font-weight: bold; color: var(--text-main); }
+        .outcome-win .date-tag { color: #52ffb8; }
+        .border-live .date-tag { color: var(--gold-live); }
+        .time-tag { font-size: 0.9rem; color: var(--text-muted); }
+        .matchup { font-size: 1.3rem; font-weight: 700; margin: 0.4rem 0; }
+        .meta-row { font-size: 0.9rem; color: var(--text-muted); }
+        .calendar-link {
+            display: inline-flex; align-items: center; justify-content: center;
+            margin-top: 0.85rem; padding: 0.5rem;
+            border: 1px solid var(--accent-gold); border-radius: 5px;
+            color: var(--text-main); font-size: 0.82rem; font-weight: 700;
+            text-decoration: none; transition: background-color 0.2s, color 0.2s;
+        }
+        .calendar-link svg { width: 1.25rem; height: 1.25rem; }
+        .calendar-link:hover { background-color: var(--accent-gold); color: #111; }
+        .highlight-link {
+            gap: 0.4rem; margin-left: 0.45rem; cursor: pointer;
+            background: transparent; color: var(--accent-gold);
+            font-family: inherit;
+        }
+        .highlight-link:hover { background: var(--accent-gold); color: #111; }
+        .highlight-modal-content { max-width: 900px; padding: 1rem; }
+        .highlight-frame { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; display: block; }
+
+        .roster-drawer { display: none; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border-color); cursor: default; }
+
+        .game-scoreboard {
+            position: relative; display: grid; grid-template-columns: minmax(150px,1fr) minmax(300px,1.35fr) minmax(150px,1fr);
+            align-items: center; gap: 1.2rem; min-height: 250px; margin-bottom: 2rem;
+            padding: 1.25rem 2rem; overflow: hidden; border: 1px solid var(--border-color);
+            border-radius: 8px; background: rgba(10,12,13,.92);
+        }
+        .scoreboard-team { display: grid; place-items: center; min-width: 0; }
+        .scoreboard-logo { width: min(100%, 210px); height: 190px; object-fit: contain; filter: drop-shadow(0 8px 12px #000); }
+        .scoreboard-center { position: relative; z-index: 1; text-align: center; }
+        .scoreboard-state { color: var(--text-muted); font-size: .76rem; font-weight: 800; letter-spacing: .28em; text-transform: uppercase; }
+        .scoreboard-score {
+            margin: .3rem 0 .8rem; color: #f4f4f4; font-size: clamp(3.4rem,7vw,6rem);
+            font-weight: 850; line-height: 1; letter-spacing: .04em; text-shadow: 0 5px 8px #000;
+        }
+        .scoreboard-score i { margin: 0 .2em; color: #68707a; font-style: normal; font-weight: 300; }
+        .period-score-table {
+            width: 100%; border-collapse: collapse; background: rgba(16,19,21,.9);
+            border: 1px solid #333a40; border-radius: 6px; overflow: hidden;
+        }
+        .period-score-table th,.period-score-table td { padding: .5rem .65rem; border-bottom: 1px solid #2b3035; text-align: center; }
+        .period-score-table tr:last-child td { border-bottom: 0; }
+        .period-score-table th { color: var(--text-muted); font-size: .7rem; letter-spacing: .08em; }
+        .period-score-table th:first-child,.period-score-table td:first-child { text-align: left; font-weight: 800; }
+        .period-score-table th:last-child,.period-score-table td:last-child { color: #fff; font-weight: 850; }
+
+        .team-stats-box {
+            background: #161616; border: 1px solid var(--border-color); border-radius: 6px;
+            padding: 1rem; margin-bottom: 1.25rem;
+        }
+        .stats-team-header {
+            display: grid; grid-template-columns: minmax(90px, 1fr) auto minmax(90px, 1fr);
+            align-items: center; gap: 1rem; margin-bottom: 0.8rem;
+            color: var(--accent-gold); font-size: 0.85rem; font-weight: bold;
+        }
+        .stats-team {
+            display: flex; align-items: center; gap: 0.65rem; min-width: 0;
+        }
+        .stats-team.home { justify-content: flex-end; }
+        .stats-team.vgk { color: var(--accent-gold); }
+        .stats-team.opponent { color: #8fa6c7; }
+        .stats-team-logo {
+            width: 46px; height: 46px; object-fit: contain; flex: 0 0 auto;
+            filter: drop-shadow(0 2px 5px rgba(0,0,0,.55));
+        }
+        .stats-heading { text-align: center; letter-spacing: 0.08em; }
+
+        .timeline-wrapper { margin-bottom: 2rem; padding: 0.5rem 0; }
+        .timeline-track {
+            position: relative;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            margin: 2rem 0 1rem 0;
+        }
+
+        .timeline-track::before {
+            content: "";
+            position: absolute;
+            left: 33.3%;
+            top: -3px;
+            width: 2px;
+            height: 14px;
+            background-color: #555555;
+            z-index: 1;
+        }
+
+        .timeline-track::after {
+            content: "";
+            position: absolute;
+            left: 66.6%;
+            top: -3px;
+            width: 2px;
+            height: 14px;
+            background-color: #555555;
+            z-index: 1;
+        }
+
+        .timeline-period-marker { position: absolute; top: -18px; font-size: 0.75rem; color: var(--text-muted); font-weight: bold; }
+
+        .goal-node {
+            position: absolute; top: -5px; width: 18px; height: 18px; border-radius: 9px;
+            background: #fff; border: 2px solid #121212; transform: translateX(-50%);
+            cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; z-index: 10;
+        }
+        .goal-node.team-vgk { background: var(--accent-gold); color: #000; box-shadow: 0 0 8px var(--accent-gold); }
+        .goal-node.team-opponent { background: #e0e0e0; color: #000; }
+
+        .goal-node .tooltip {
+            visibility: hidden; width: 190px; background-color: #000; color: #fff; text-align: center;
+            border-radius: 4px; padding: 6px; position: absolute; z-index: 100; bottom: 150%; left: 50%;
+            transform: translateX(-50%); opacity: 0; transition: opacity 0.2s; font-size: 0.75rem;
+            border: 1px solid var(--accent-gold); line-height: 1.35; pointer-events: none; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .goal-node:hover .tooltip { visibility: visible; opacity: 1; }
+
+        .stat-row-comparison {
+            position: relative; display: flex; justify-content: space-between; align-items: center;
+            min-height: 2.55rem; padding: 0 0.65rem; margin-top: 0.35rem;
+            font-size: 0.9rem; overflow: hidden; border-radius: 4px;
+            background: #1c1c1c;
+        }
+        .stat-bar-layer {
+            position: absolute; inset: 0; display: flex;
+            gap: 5px; pointer-events: none;
+        }
+        .stat-bar-half { position: relative; flex: var(--bar-value) 1 0; overflow: hidden; }
+        .stat-bar-fill { position: absolute; inset: 0; opacity: .34; }
+        .stat-bar-half.vgk .stat-bar-fill {
+            background: linear-gradient(90deg, rgba(180,151,90,.95), rgba(180,151,90,.5));
+        }
+        .stat-bar-half.opponent .stat-bar-fill {
+            background: linear-gradient(270deg, rgba(69,91,126,.95), rgba(69,91,126,.5));
+        }
+        .stat-val,.stat-label { position: relative; z-index: 1; }
+        .stat-val { width: 25%; font-size: 1rem; font-weight: 800; }
+        .stat-val.away { text-align: left; }
+        .stat-val.home { text-align: right; }
+        .stat-label {
+            width: 50%; text-align: center; color: var(--text-main); font-size: 0.76rem;
+            font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+            text-shadow: 0 1px 3px #000;
+        }
+
+        @media (max-width: 520px) {
+            body { padding: 1rem; }
+            header { padding-right: 64px; }
+            header::after { width: 52px; height: 52px; }
+            .game-scoreboard { grid-template-columns: 70px 1fr 70px; min-height: 190px; padding: 1rem .55rem; gap: .35rem; }
+            .scoreboard-logo { width: 70px; height: 110px; }
+            .scoreboard-score { font-size: 3rem; }
+            .period-score-table th,.period-score-table td { padding: .38rem .3rem; font-size: .72rem; }
+            .stats-team-header { grid-template-columns: 1fr auto 1fr; gap: .45rem; }
+            .stats-team-logo { width: 36px; height: 36px; }
+            .stats-heading { font-size: .68rem; }
+        }
+
+        .roster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; }
+        .player-item {
+            font-size: 0.9rem; background: #262626; padding: 0.6rem; border-radius: 4px;
+            display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+        }
+        .player-item:hover { background: #333333; border: 1px solid var(--accent-gold); }
+        .player-index { font-weight: bold; margin-right: 0.5rem; color: var(--text-muted); }
+        .player-pos { color: var(--accent-gold); font-weight: bold; }
+        .game-leaders { margin-top: 1.25rem; }
+        .leaders-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:.8rem; }
+        .leaders-heading h3 { margin:0; color:var(--accent-gold); font-size:1rem; }
+        .players-page-link { color:var(--text-muted); font-size:.75rem; font-weight:700; text-decoration:none; text-transform:uppercase; letter-spacing:.06em; }
+        .players-page-link:hover { color:var(--accent-gold); }
+        .leaders-main { display:grid; grid-template-columns:minmax(230px,.8fr) minmax(420px,2.2fr); gap:.7rem; align-items:stretch; }
+        .goalie-stack { display:grid; gap:.7rem; }
+        .leader-card { background:#232323; border:1px solid var(--border-color); border-radius:6px; padding:.8rem; }
+        .leader-card.goalie { border-color:rgba(180,151,90,.55); }
+        .leader-kicker { color:var(--text-muted); font-size:.66rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+        .leader-name { margin:.25rem 0 .4rem; color:var(--text-main); font-weight:800; }
+        .leader-line { color:var(--text-muted); font-size:.8rem; line-height:1.45; }
+        .leader-line strong { color:var(--accent-gold); }
+        .scoring-panel { min-width:0; }
+        .scoring-list { margin-top:.45rem; }
+        .scoring-row { display:grid; grid-template-columns:minmax(150px,1.5fr) repeat(3,42px) minmax(90px,.7fr) minmax(75px,.6fr); align-items:center; gap:.35rem; padding:.55rem 0; border-top:1px solid var(--border-color); font-size:.8rem; }
+        .scoring-row.header { padding:.2rem 0 .35rem; border:0; color:var(--text-muted); font-size:.62rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+        .scoring-row span:not(:first-child) { text-align:center; }
+        .scoring-row .scoring-name { overflow:hidden; color:var(--text-main); font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
+        .scoring-row .points { color:var(--accent-gold); font-weight:900; }
+        .category-strip { display:grid; grid-template-columns:repeat(3,1fr); gap:.7rem; margin-top:.7rem; }
+        .category-card { display:grid; grid-template-columns:1fr auto; align-items:center; gap:.25rem 1rem; }
+        .category-card .leader-kicker { grid-column:1 / -1; }
+        .category-card .leader-name { margin:.15rem 0 0; }
+        .category-value { color:var(--accent-gold); font-size:1.35rem; font-weight:900; }
+        @media (max-width:760px) {
+            .leaders-main { grid-template-columns:1fr; }
+            .category-strip { grid-template-columns:1fr; }
+            .scoring-row { grid-template-columns:minmax(120px,1.4fr) repeat(3,34px); }
+            .scoring-row span:nth-child(5),.scoring-row span:nth-child(6) { display:none; }
+        }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--modal-overlay); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background-color: var(--card-bg); border: 2px solid var(--accent-gold); padding: 2rem; border-radius: 12px; max-width: 450px; width: 90%; text-align: center; position: relative; }
+        .close-btn { position: absolute; top: 10px; right: 15px; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; }
+        .modal-headshot { width: 110px; height: 110px; border-radius: 55px; background: #262626; margin-bottom: 1rem; object-fit: cover; border: 1px solid var(--border-color); }
+        .stat-section-title { text-align: left; font-size: 0.85rem; color: var(--accent-gold); text-transform: uppercase; margin: 1.25rem 0 0.4rem 0; font-weight: bold; border-bottom: 1px solid var(--border-color); padding-bottom: 2px; }
+        .stats-table { width: 100%; border-collapse: collapse; margin-bottom: 0.5rem; }
+        .stats-table th, .stats-table td { padding: 0.4rem; border-bottom: 1px solid var(--border-color); text-align: center; font-size: 0.9rem; }
+        .stats-table th { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; font-weight: normal; }
+
+        .page-jump-controls {
+            position: fixed; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
+            z-index: 500; display: grid; gap: 0.55rem;
+        }
+        .page-jump-button {
+            display: grid; place-items: center; width: 3rem; height: 3rem; padding: 0;
+            border: 1px solid var(--accent-gold); border-radius: 50%;
+            background: rgba(30, 30, 30, 0.94); color: var(--accent-gold);
+            box-shadow: 0 5px 18px rgba(0, 0, 0, 0.45); cursor: pointer;
+            transition: background-color 0.2s, color 0.2s, opacity 0.2s, transform 0.2s;
+        }
+        .page-jump-button:hover { background: var(--accent-gold); color: #111; transform: translateY(-2px); }
+        .page-jump-button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+        .page-jump-button svg { width: 1.45rem; height: 1.45rem; }
+        .page-jump-button[hidden] { display: none; }
+
+        @media (max-width: 520px) {
+            body { padding: 1rem; }
+            .page-jump-button { width: 2.75rem; height: 2.75rem; }
+        }
+    </style>
+    <style>:root{--accent-gold:{{ dashboard.primaryColor }};--accent-red:{{ dashboard.accentColor }};--team-highlight:{{ dashboard.tertiaryColor }}}body{background:radial-gradient(circle at 88% 0,color-mix(in srgb,var(--accent-red) 20%,transparent),transparent 34rem),radial-gradient(circle at 8% 100%,color-mix(in srgb,var(--team-highlight) 12%,transparent),transparent 30rem),var(--bg-color)}header{border-image:linear-gradient(90deg,var(--accent-gold),var(--accent-red),var(--team-highlight)) 1}</style>
+</head>
+<body id="page-top">
+    {% macro render_game_grid(games, empty_message) %}
+        <div class="grid">
+            {% for game in games %}
+            <div class="game-card {{ game.outcome_class }} {{ game.border_class }}" tabindex="-1"
+                 style="--away-logo: url('https://assets.nhle.com/logos/nhl/svg/{{ game.away_abbrev }}_dark.svg'); --home-logo: url('https://assets.nhle.com/logos/nhl/svg/{{ game.home_abbrev }}_dark.svg');"
+                 onclick="toggleRoster('roster-{{ game.id }}', '{{ game.id }}', '{{ game.state }}', event)">
+                <div class="card-header">
+                    <span class="date-tag">{{ game.date }}</span>
+                    <span class="time-tag">Time: {{ game.time }} {{ game.timezone }}</span>
+                </div>
+                <div class="matchup">{{ game.matchup }}</div>
+                <div class="meta-row">
+                    <span>Loc: {{ game.venue }}</span> &bull;
+                    <span>Status: {{ game.status if game.status in ['Upcoming', 'LIVE NOW'] else game.score }}</span>
+                </div>
+                {% if game.calendar_url %}
+                <a class="calendar-link" href="{{ game.calendar_url }}" target="_blank" rel="noopener noreferrer"
+                   aria-label="Add {{ game.matchup }} to Google Calendar" title="Add to Google Calendar"
+                   onclick="event.stopPropagation()">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="5" width="18" height="16" rx="2"></rect>
+                        <path d="M16 3v4M8 3v4M3 10h18"></path>
+                        <path d="M12 14v4M10 16h4"></path>
+                    </svg>
+                </a>
+                {% endif %}
+                {% if game.highlight_video_id %}
+                <button class="calendar-link highlight-link" type="button"
+                        onclick="openHighlights('{{ game.highlight_video_id }}', {{ game.highlight_title|tojson|forceescape }}, event)">
+                    ▶ Watch Highlights
+                </button>
+                {% endif %}
+
+                <div id="roster-{{ game.id }}" class="roster-drawer" onclick="event.stopPropagation()">
+                    <div id="team-stats-container-{{ game.id }}"></div>
+                    <div id="roster-container-{{ game.id }}"></div>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-season">{{ empty_message }}</div>
+            {% endfor %}
+        </div>
+    {% endmacro %}
+
+    <div class="container">
+        <header>
+            <h1>{{ dashboard.teamName }}</h1>
+            <div class="subtitle">Season Tracking Hub</div>
+            <a class="calendar-link" href="{{ url_for('stats') }}">View Season Stats</a>
+            <a class="calendar-link" href="{{ url_for('standings_page') }}">NHL Standings</a>
+            <a class="calendar-link" href="{{ url_for('playoffs_page') }}">Stanley Cup</a>
+            <a class="calendar-link" href="{{ url_for('players') }}">Players</a>
+            <a class="calendar-link" href="{{ url_for('cyd_preview') }}">CYD Preview</a>
+            <a class="calendar-link" href="{{ url_for('settings_page') }}">Settings</a>
+        </header>
+
+        <div class="season-tabs" role="tablist" aria-label="{{ dashboard.teamAbbrev }} schedule sections">
+            <button id="regular-tab" class="season-tab{% if default_tab == 'regular' %} active{% endif %}" type="button" role="tab" aria-controls="regular-panel" aria-selected="{{ 'true' if default_tab == 'regular' else 'false' }}" onclick="showSeasonTab('regular')">
+                Regular Season ({{ regular_games|length }})
+            </button>
+            <button id="playoffs-tab" class="season-tab{% if default_tab == 'playoffs' %} active{% endif %}" type="button" role="tab" aria-controls="playoffs-panel" aria-selected="{{ 'true' if default_tab == 'playoffs' else 'false' }}" onclick="showSeasonTab('playoffs')">
+                Playoffs ({{ playoff_games|length }})
+            </button>
+            <button id="historical-tab" class="season-tab" type="button" role="tab" aria-controls="historical-panel" aria-selected="false" onclick="showSeasonTab('historical')">
+                Historical {{ dashboard.historicalSeasonId[:4] }}–{{ dashboard.historicalSeasonId[6:] }} ({{ historical_regular_games|length + historical_playoff_games|length }})
+            </button>
+        </div>
+
+        <div id="regular-panel" class="season-panel{% if default_tab == 'regular' %} active{% endif %}" role="tabpanel" aria-labelledby="regular-tab">
+            {{ render_game_grid(regular_games, 'The ' ~ dashboard.seasonId[:4] ~ '–' ~ dashboard.seasonId[6:] ~ ' regular-season schedule is not available yet.') }}
+        </div>
+
+        <div id="playoffs-panel" class="season-panel{% if default_tab == 'playoffs' %} active{% endif %}" role="tabpanel" aria-labelledby="playoffs-tab">
+            {{ render_game_grid(playoff_games, 'The ' ~ dashboard.seasonId[4:] ~ ' Stanley Cup Playoff schedule is not available yet.') }}
+        </div>
+
+        <div id="historical-panel" class="season-panel" role="tabpanel" aria-labelledby="historical-tab">
+            <h2>{{ dashboard.historicalSeasonId[:4] }}–{{ dashboard.historicalSeasonId[6:] }} Regular Season ({{ historical_regular_games|length }})</h2>
+            {{ render_game_grid(historical_regular_games, 'Historical regular-season data is temporarily unavailable.') }}
+            <h2 style="margin-top: 2rem;">{{ dashboard.historicalSeasonId[4:] }} Stanley Cup Playoffs ({{ historical_playoff_games|length }})</h2>
+            {{ render_game_grid(historical_playoff_games, 'No playoff games were recorded for this season.') }}
+        </div>
+    </div>
+
+    <nav class="page-jump-controls" aria-label="Schedule navigation">
+        <button id="latestGameButton" class="page-jump-button" type="button" title="Jump to latest game" aria-label="Jump to latest game">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9l6 6 6-6"></path>
+            </svg>
+        </button>
+        <button id="backToTopButton" class="page-jump-button" type="button" title="Back to top" aria-label="Back to top" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 15l6-6 6 6"></path>
+            </svg>
+        </button>
+    </nav>
+
+    <div id="statsModal" class="modal" onclick="closeModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <img id="modalHeadshot" class="modal-headshot" src="" alt="Player Headshot">
+            <h2 id="modalName" style="margin: 0 0 0.25rem 0; color: var(--text-main); font-size: 1.5rem;">Player Name</h2>
+            <p id="modalMeta" style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">Position &bull; #00</p>
+            <div id="modalStatsContainer"></div>
+        </div>
+    </div>
+
+    <div id="highlightsModal" class="modal" onclick="closeHighlights()">
+        <div class="modal-content highlight-modal-content" onclick="event.stopPropagation()">
+            <span class="close-btn" onclick="closeHighlights()">&times;</span>
+            <h2 id="highlightsTitle" style="margin: 0 2rem 1rem 0; text-align: left;">Game Highlights</h2>
+            <iframe id="highlightsFrame" class="highlight-frame" title="NHL game highlights"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen></iframe>
+        </div>
+    </div>
+
+    <script>
+        // Track the active live timer process ID so we can shut it down cleanly
+        let liveRefreshInterval = null;
+
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+        function activeSchedulePanel() {
+            return document.querySelector('.season-panel.active');
+        }
+
+        function findLatestGame() {
+            const panel = activeSchedulePanel();
+            if (!panel) return null;
+
+            const liveGame = panel.querySelector('.game-card.border-live');
+            if (liveGame) return liveGame;
+
+            const completedGames = panel.querySelectorAll('.game-card.outcome-win, .game-card.outcome-loss');
+            if (completedGames.length) return completedGames[completedGames.length - 1];
+
+            return panel.querySelector('.game-card.border-next, .game-card');
+        }
+
+        function jumpToLatestGame() {
+            const latestGame = findLatestGame();
+            if (!latestGame) return;
+            latestGame.scrollIntoView({ behavior: reducedMotion.matches ? 'auto' : 'smooth', block: 'center' });
+            latestGame.focus({ preventScroll: true });
+        }
+
+        function updateJumpControls() {
+            document.getElementById('latestGameButton').hidden = !findLatestGame();
+            document.getElementById('backToTopButton').hidden = window.scrollY < 320;
+        }
+
+        document.getElementById('latestGameButton').addEventListener('click', jumpToLatestGame);
+        document.getElementById('backToTopButton').addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: reducedMotion.matches ? 'auto' : 'smooth' });
+        });
+        window.addEventListener('scroll', updateJumpControls, { passive: true });
+        updateJumpControls();
+
+        function openHighlights(videoId, title, event) {
+            event.stopPropagation();
+            document.getElementById('highlightsTitle').textContent = title || 'Game Highlights';
+            document.getElementById('highlightsFrame').src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
+            document.getElementById('highlightsModal').style.display = 'flex';
+        }
+
+        function closeHighlights() {
+            document.getElementById('highlightsModal').style.display = 'none';
+            document.getElementById('highlightsFrame').src = '';
+        }
+
+        function showSeasonTab(tabName) {
+            document.querySelectorAll('.season-tab').forEach(tab => {
+                const isActive = tab.id === `${tabName}-tab`;
+                tab.classList.toggle('active', isActive);
+                tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+
+            document.querySelectorAll('.season-panel').forEach(panel => {
+                panel.classList.toggle('active', panel.id === `${tabName}-panel`);
+            });
+
+            document.querySelectorAll('.roster-drawer').forEach(drawer => drawer.style.display = 'none');
+            if (liveRefreshInterval) {
+                clearInterval(liveRefreshInterval);
+                liveRefreshInterval = null;
+            }
+            updateJumpControls();
+        }
+
+        function buildGameScoreboard(data, awayTeam, homeTeam) {
+            const timeline = Array.isArray(data.timeline) ? data.timeline : [];
+            const extraPeriods = [];
+            timeline.forEach(goal => {
+                if (goal.period && !['P1', 'P2', 'P3'].includes(goal.period) && !extraPeriods.includes(goal.period)) {
+                    extraPeriods.push(goal.period);
+                }
+            });
+            const periods = ['P1', 'P2', 'P3', ...extraPeriods];
+            const periodHeading = period => period.startsWith('P') ? `${period.slice(1)}${period === 'P1' ? 'ST' : period === 'P2' ? 'ND' : 'RD'}` : period;
+            const goalsInPeriod = (team, period) => timeline.filter(goal => goal.team === team && goal.period === period).length;
+            const stateLabel = data.game_state === 'OFF' ? 'FINAL' : data.game_state === 'LIVE' ? 'LIVE' : 'GAME';
+            const awayScore = Number(data.away_score) || 0;
+            const homeScore = Number(data.home_score) || 0;
+
+            return `
+                <section class="game-scoreboard" aria-label="${awayTeam} ${awayScore}, ${homeTeam} ${homeScore}, ${stateLabel}">
+                    <div class="scoreboard-team">
+                        <img class="scoreboard-logo" src="https://assets.nhle.com/logos/nhl/svg/${encodeURIComponent(awayTeam)}_dark.svg" alt="${awayTeam} logo">
+                    </div>
+                    <div class="scoreboard-center">
+                        <div class="scoreboard-state">${stateLabel}</div>
+                        <div class="scoreboard-score">${awayScore}<i>–</i>${homeScore}</div>
+                        <table class="period-score-table">
+                            <thead><tr><th>TEAM</th>${periods.map(period => `<th>${periodHeading(period)}</th>`).join('')}<th>T</th></tr></thead>
+                            <tbody>
+                                <tr><td>${awayTeam}</td>${periods.map(period => `<td>${goalsInPeriod(awayTeam, period)}</td>`).join('')}<td>${awayScore}</td></tr>
+                                <tr><td>${homeTeam}</td>${periods.map(period => `<td>${goalsInPeriod(homeTeam, period)}</td>`).join('')}<td>${homeScore}</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="scoreboard-team">
+                        <img class="scoreboard-logo" src="https://assets.nhle.com/logos/nhl/svg/${encodeURIComponent(homeTeam)}_dark.svg" alt="${homeTeam} logo">
+                    </div>
+                </section>
+            `;
+        }
+
+        function buildGameLeaders(players) {
+            if (!Array.isArray(players) || players.length === 0) {
+                return `<p style="font-size:0.85rem; color:var(--text-muted);">Game-specific player statistics are being added to this archived boxscore. Reopen the game shortly.</p>`;
+            }
+
+            const skaters = players.filter(player => player.type !== 'goalie');
+            const goalies = players.filter(player => player.type === 'goalie' && ((Number(player.shots_against) || 0) > 0 || player.toi !== '00:00'));
+            const scoring = [...skaters]
+                .filter(player => (Number(player.points) || 0) > 0)
+                .sort((a, b) => (Number(b.points) - Number(a.points)) || (Number(b.goals) - Number(a.goals)) || (Number(b.shots) - Number(a.shots)))
+                .slice(0, 3);
+            const categoryLeader = (field) => [...skaters].sort((a, b) => Number(b[field] || 0) - Number(a[field] || 0))[0];
+            const categories = [
+                ['Shots leader', 'shots', categoryLeader('shots')],
+                ['Hits leader', 'hits', categoryLeader('hits')],
+                ['Blocks leader', 'blocks', categoryLeader('blocks')],
+            ].filter(([, field, player]) => player && Number(player[field] || 0) > 0);
+
+            let html = `<section class="game-leaders"><div class="leaders-heading"><h3>{{ dashboard.teamAbbrev }} Game Leaders</h3><a class="players-page-link" href="{{ url_for('players') }}">All players →</a></div><div class="leaders-main"><div class="goalie-stack">`;
+
+            goalies.forEach(goalie => {
+                const savePct = goalie.save_pct == null ? '—' : `${(Number(goalie.save_pct) * 100).toFixed(1)}%`;
+                html += `<div class="leader-card goalie"><div class="leader-kicker">Goaltending ${goalie.decision ? `· ${goalie.decision}` : ''}</div><div class="leader-name">#${goalie.number} ${goalie.name}</div><div class="leader-line"><strong>${goalie.saves}</strong> saves on ${goalie.shots_against} shots · ${savePct}<br>${goalie.goals_against} GA · ${goalie.toi} TOI</div></div>`;
+            });
+
+            html += `</div><div class="leader-card scoring-panel"><div class="leader-kicker">Scoring leaders</div><div class="scoring-list"><div class="scoring-row header"><span>Player</span><span>G</span><span>A</span><span>PTS</span><span>Shots</span><span>TOI</span></div>`;
+            scoring.forEach(player => {
+                html += `<div class="scoring-row"><span class="scoring-name">#${player.number} ${player.name}</span><span>${player.goals}</span><span>${player.assists}</span><span class="points">${player.points}</span><span>${player.shots}</span><span>${player.toi}</span></div>`;
+            });
+            if (scoring.length === 0) html += `<div class="leader-line">No {{ dashboard.teamAbbrev }} point scorers recorded.</div>`;
+            html += `</div></div></div><div class="category-strip">`;
+
+            categories.forEach(([label, field, player]) => {
+                html += `<div class="leader-card category-card"><div class="leader-kicker">${label}</div><div class="leader-name">#${player.number} ${player.name}</div><div class="category-value">${player[field]}</div></div>`;
+            });
+
+            html += `</div></section>`;
+            return html;
+        }
+
+        async function fetchBoxscoreData(gameId) {
+            const statsBox = document.getElementById(`team-stats-container-${gameId}`);
+            const rosterBox = document.getElementById(`roster-container-${gameId}`);
+
+            try {
+                const endpoint = {{ url_for('game_boxscore', game_id='__GAME_ID__')|tojson }}.replace('__GAME_ID__', encodeURIComponent(gameId));
+                const response = await fetch(endpoint, {cache: 'no-store'});
+                if (!response.ok) throw new Error(`Box score request failed: HTTP ${response.status}`);
+                const data = await response.json();
+
+                let statsHtml = ``;
+                const actualHome = data.home_team || data.homeTeam || "HOME";
+                const actualAway = data.away_team || data.awayTeam || "AWAY";
+
+                statsHtml += buildGameScoreboard(data, actualAway, actualHome);
+
+                if (data.timeline && data.timeline.length > 0) {
+                    statsHtml += `
+                        <div class="timeline-wrapper" style="position: relative; margin-bottom: 2.5rem;">
+                            <div style="color:var(--accent-gold); font-size:0.85rem; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px;">Match Scoring Timeline</div>
+                            <div class="timeline-track">
+                                <span class="timeline-period-marker" style="left: 0%;">P1</span>
+                                <span class="timeline-period-marker" style="left: 33.3%;">P2</span>
+                                <span class="timeline-period-marker" style="left: 66.6%;">P3</span>
+                                <span class="timeline-period-marker" style="left: 100%; transform: translateX(-100%);">END</span>
+                    `;
+
+                    data.timeline.forEach(goal => {
+                        const nodeClass = goal.team === {{ dashboard.teamAbbrev|tojson }} ? "team-vgk" : "team-opponent";
+                        statsHtml += `
+                            <div class="goal-node ${nodeClass}" style="position: absolute; top: -5px; left: ${goal.position_pct}%;">
+                                🥅
+                                <span class="tooltip">
+                                    <strong>${goal.period} - ${goal.time} (${goal.team})</strong><br>
+                                    Goal: ${goal.scorer}<br>
+                                    Running Score: ${goal.away_score} - ${goal.home_score}
+                                </span>
+                            </div>
+                        `;
+                    });
+
+                    statsHtml += `</div></div>`;
+                }
+
+                statsHtml += `
+                    <div class="team-stats-box">
+                        <div class="stats-team-header">
+                            <div class="stats-team away ${actualAway === {{ dashboard.teamAbbrev|tojson }} ? 'vgk' : 'opponent'}">
+                                <img class="stats-team-logo" src="https://assets.nhle.com/logos/nhl/svg/${encodeURIComponent(actualAway)}_dark.svg" alt="${actualAway} logo">
+                                <span>${actualAway}</span>
+                            </div>
+                            <span class="stats-heading">MATCH STATISTICS</span>
+                            <div class="stats-team home ${actualHome === {{ dashboard.teamAbbrev|tojson }} ? 'vgk' : 'opponent'}">
+                                <span>${actualHome}</span>
+                                <img class="stats-team-logo" src="https://assets.nhle.com/logos/nhl/svg/${encodeURIComponent(actualHome)}_dark.svg" alt="${actualHome} logo">
+                            </div>
+                        </div>
+                `;
+
+                if (data.stats && data.stats.length > 0) {
+                    data.stats.forEach(stat => {
+                        const awayValue = Number(stat.away) || 0;
+                        const homeValue = Number(stat.home) || 0;
+                        const hasValues = awayValue + homeValue > 0;
+                        const awayBarValue = hasValues ? awayValue : 1;
+                        const homeBarValue = hasValues ? homeValue : 1;
+                        statsHtml += `
+                            <div class="stat-row-comparison">
+                                <div class="stat-bar-layer" aria-hidden="true">
+                                    <div class="stat-bar-half ${actualAway === {{ dashboard.teamAbbrev|tojson }} ? 'vgk' : 'opponent'}" style="--bar-value:${awayBarValue}"><span class="stat-bar-fill"></span></div>
+                                    <div class="stat-bar-half ${actualHome === {{ dashboard.teamAbbrev|tojson }} ? 'vgk' : 'opponent'}" style="--bar-value:${homeBarValue}"><span class="stat-bar-fill"></span></div>
+                                </div>
+                                <span class="stat-val away">${stat.away}</span>
+                                <span class="stat-label">${stat.label}</span>
+                                <span class="stat-val home">${stat.home}</span>
+                            </div>
+                        `;
+                    });
+                } else {
+                    statsHtml += `<p style="font-size:0.85rem; color:var(--text-muted); text-align:center; padding:0.5rem;">Stats breakdown pending.</p>`;
+                }
+                statsHtml += `</div>`;
+                statsBox.innerHTML = statsHtml;
+
+                rosterBox.innerHTML = buildGameLeaders(data.players || []);
+
+            } catch (err) {
+                statsBox.innerHTML = `<p style="font-size:0.85rem; color:#ff6b6b; padding-left:0.5rem;">Advanced data sync failure.</p>`;
+            }
+        }
+
+        async function toggleRoster(drawerId, gameId, gameState, event) {
+            const drawer = document.getElementById(drawerId);
+            const isVisible = drawer.style.display === 'block';
+
+            // Clear any active running intervals to avoid multi-thread ticking
+            if (liveRefreshInterval) {
+                clearInterval(liveRefreshInterval);
+                liveRefreshInterval = null;
+            }
+
+            if (isVisible) {
+                drawer.style.display = 'none';
+                return;
+            }
+
+            document.querySelectorAll('.roster-drawer').forEach(el => el.style.display = 'none');
+            drawer.style.display = 'block';
+
+            if (gameState === 'OFF' || gameState === 'LIVE') {
+                const statsBox = document.getElementById(`team-stats-container-${gameId}`);
+                const rosterBox = document.getElementById(`roster-container-${gameId}`);
+
+                statsBox.innerHTML = `<p style="font-size:0.85rem; color:var(--text-muted); padding-left:0.5rem;">Loading advanced game metrics...</p>`;
+                rosterBox.innerHTML = ``;
+
+                // Fire initial sync draw
+                await fetchBoxscoreData(gameId);
+
+                // 💡 LIVE AUTOMATION HOOK: If the game is actively running, auto-refresh the data matrix
+                if (gameState === 'LIVE') {
+                    liveRefreshInterval = setInterval(async () => {
+                        await fetchBoxscoreData(gameId);
+                    }, 15000); // Poll every 15s to match our sync.py sync timeline
+                }
+            }
+        }
+
+        function generateTableHtml(summary, position) {
+            if (position === 'G') {
+                return `<table class="stats-table">
+                    <tr><th>GS</th><th>W</th><th>L</th><th>GAA</th><th>SV%</th></tr>
+                    <tr>
+                        <td>${summary.gamesStarted ?? 0}</td>
+                        <td>${summary.wins ?? 0}</td>
+                        <td>${summary.losses ?? 0}</td>
+                        <td>${summary.gaa ? summary.gaa.toFixed(2) : '0.00'}</td>
+                        <td>${summary.savePctg ? (summary.savePctg * 100).toFixed(1) + '%' : '0.0%'}</td>
+                    </tr>
+                </table>`;
+            } else {
+                return `<table class="stats-table">
+                    <tr><th>GP</th><th>G</th><th>A</th><th>PTS</th><th>+/-</th></tr>
+                    <tr>
+                        <td>${summary.gamesPlayed ?? 0}</td>
+                        <td>${summary.goals ?? 0}</td>
+                        <td>${summary.assists ?? 0}</td>
+                        <td>${summary.points ?? 0}</td>
+                        <td>${summary.plusMinus ?? 0}</td>
+                    </tr>
+                </table>`;
+            }
+        }
+
+        async function showPlayerStats(playerId, position, event) {
+            event.stopPropagation();
+            const modal = document.getElementById('statsModal');
+            document.getElementById('modalName').innerText = "Loading...";
+            document.getElementById('modalStatsContainer').innerHTML = "Fetching real-time stats...";
+            modal.style.display = 'flex';
+
+            try {
+                const endpoint = {{ url_for('player_stats', player_id='__PLAYER_ID__')|tojson }}.replace('__PLAYER_ID__', encodeURIComponent(playerId));
+                const response = await fetch(endpoint, {cache: 'no-store'});
+                if (!response.ok) throw new Error(`Player request failed: HTTP ${response.status}`);
+                const data = await response.json();
+
+                document.getElementById('modalName').innerText = `${data.firstName?.default || ''} ${data.lastName?.default || ''}`;
+                document.getElementById('modalMeta').innerText = `Position: ${data.position || position} | #${data.sweaterNumber || '--'}`;
+                document.getElementById('modalHeadshot').src = data.headshot || "https://assets.nhle.com/mugs/nhl/default-headshot.png";
+
+                const regSeasonSummary = data.featuredStats?.regularSeason?.subSeason || {};
+                const playoffSummary = data.featuredStats?.playoffs?.subSeason || null;
+
+                let combinedHtml = `<div class="stat-section-title">Regular Season</div>` + generateTableHtml(regSeasonSummary, position);
+                combinedHtml += `<div class="stat-section-title">{{ dashboard.seasonId[4:] }} Stanley Cup Playoffs</div>`;
+
+                if (playoffSummary && (playoffSummary.gamesPlayed > 0 || playoffSummary.gamesStarted > 0)) {
+                    combinedHtml += generateTableHtml(playoffSummary, position);
+                } else {
+                    combinedHtml += `<p style="color: var(--text-muted); font-size: 0.85rem; margin: 0.5rem 0; text-align: left; padding-left: 0.4rem;">No playoff stats recorded yet for this season.</p>`;
+                }
+
+                document.getElementById('modalStatsContainer').innerHTML = combinedHtml;
+            } catch (err) {
+                document.getElementById('modalStatsContainer').innerHTML = "<span style='color: #ff6b6b;'>Failed to sync stats profile.</span>";
+            }
+        }
+
+        function closeModal() { document.getElementById('statsModal').style.display = 'none'; }
+    </script>
+</body>
+</html>

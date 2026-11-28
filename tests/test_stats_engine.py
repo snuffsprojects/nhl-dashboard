@@ -24,6 +24,24 @@ class StatsTests(unittest.TestCase):
             self.assertEqual(stats["overall"]["wins"], 1)
             self.assertEqual(stats["overall"]["goals_for"], 4)
 
+    def test_final_state_counts_as_completed(self):
+        with tempfile.TemporaryDirectory() as data_dir, patch.dict(os.environ, {
+            "NHL_TEAM": "VGK", "NHL_DATA_DIR": data_dir,
+        }, clear=False):
+            import config
+            import stats_engine
+            importlib.reload(config)
+            engine = importlib.reload(stats_engine)
+            stats = engine.build_season_stats([{
+                "id": 2, "gameState": "FINAL", "gameType": 2,
+                "gameDate": "2026-11-27",
+                "homeTeam": {"abbrev": "SJS", "score": 4},
+                "awayTeam": {"abbrev": "VGK", "score": 1},
+                "gameOutcome": {"lastPeriodType": "REG"},
+            }])
+            self.assertEqual(stats["overall"]["games"], 1)
+            self.assertEqual(stats["overall"]["losses"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

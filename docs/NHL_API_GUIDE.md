@@ -97,9 +97,14 @@ States observed and handled by this project:
 | `FUT` | Scheduled future game |
 | `PRE` | Pregame state close to puck drop |
 | `LIVE` | Game in progress |
+| `CRIT` | Live game in a late/critical phase |
+| `FINAL` | Game ended; post-game processing may still be underway |
 | `OFF` | Completed and official enough to cache as final |
+| `SUSP` | Game suspended; continue monitoring without discarding cached details |
+| `PPD` | Game postponed |
+| `CNCL` | Game cancelled |
 
-The service has seen other state-related fields and the NHL may add or use additional values. Code should have an unknown-state fallback.
+Treat both `FINAL` and `OFF` as completed, and both `LIVE` and `CRIT` as live. The NHL may add or use additional values, so unknown states must be shown explicitly and must not be silently treated as upcoming or erase previously cached game details.
 
 `startTimeUTC` is an ISO-8601 UTC value such as `2026-11-01T21:00:00Z`. Display it by converting from UTC into the viewer's or configured venue timezone; do not manually add a fixed offset. Schedule objects may also provide `easternUTCOffset`, `venueUTCOffset`, and `venueTimezone`.
 

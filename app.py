@@ -23,6 +23,7 @@ from config import (
     MQTT_TOPIC_PREFIX, public_config,
 )
 from game_center import process_game_center
+from game_states import is_completed, is_live, is_scheduled, state_category, state_label
 from history_store import load_historical_cache, save_historical_game_metrics
 from youtube_highlights import sync_historical_highlights
 from stats_engine import build_season_stats
@@ -270,7 +271,10 @@ def index():
 
     regular_games = process_games(raw_regular_games)
     playoff_games = process_games(raw_playoff_games)
-    playoffs_started = any(game.get("state") in ["PRE", "LIVE", "OFF"] for game in playoff_games)
+    playoffs_started = any(
+        state_category(game.get("state")) != "scheduled" or game.get("state") == "PRE"
+        for game in playoff_games
+    )
 
     historical_regular_games = process_games([
         game for game in historical_cache.get("games", [])
@@ -491,20 +495,21 @@ def process_games(raw_games):
 
         outcome_class = ""
         border_class = ""
-        status_label = "Upcoming"
+        category = state_category(state)
+        status_label = state_label(state)
 
-        if state == "LIVE":
+        if is_live(state):
             border_class = "border-live"
-            status_label = "LIVE NOW"
-        elif state == "OFF":
-            status_label = "Final"
+        elif is_completed(state):
             if (home_abbrev == TEAM_ABBREV and home_score > away_score) or (away_abbrev == TEAM_ABBREV and away_score > home_score):
                 outcome_class = "outcome-win"
             else:
                 outcome_class = "outcome-loss"
-        else:
-            if not processed_games or processed_games[-1].get("state") == "OFF":
+        elif is_scheduled(state):
+            if not processed_games or is_completed(processed_games[-1].get("state")):
                 border_class = "border-next"
+        elif category == "suspended":
+            border_class = "border-live"
 
         start_time_utc = game.get("startTimeUTC", "")
         date_str, time_str, timezone_name = format_utc_to_london(start_time_utc)
@@ -526,7 +531,7 @@ def process_games(raw_games):
             "outcome_class": outcome_class,
             "border_class": border_class,
             "calendar_url": build_google_calendar_url(start_time_utc, matchup, location)
-                if state in ["FUT", "PRE"] else None,
+                if is_scheduled(state) else None,
             "highlight_video_id": game.get("highlight_video_id"),
             "highlight_title": game.get("highlight_title"),
         })
@@ -558,7 +563,7 @@ def game_boxscore(game_id):
     for game in cache_data.get("games", []):
         if str(game.get("id")) == str(game_id):
             metrics = game.get("match_metrics", {})
-            if game.get("gameState") in ("LIVE", "OFF") and not metrics.get("players"):
+            if (is_live(game.get("gameState")) or is_completed(game.get("gameState"))) and not metrics.get("players"):
                 refreshed_metrics = process_game_center(game_id)
                 if refreshed_metrics.get("stats"):
                     metrics = refreshed_metrics

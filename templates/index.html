@@ -331,7 +331,7 @@
                 <div class="matchup">{{ game.matchup }}</div>
                 <div class="meta-row">
                     <span>Loc: {{ game.venue }}</span> &bull;
-                    <span>Status: {{ game.status if game.status in ['Upcoming', 'LIVE NOW'] else game.score }}</span>
+                    <span>Status: {{ game.score if game.status == 'Final' else game.status }}</span>
                 </div>
                 {% if game.calendar_url %}
                 <a class="calendar-link" href="{{ game.calendar_url }}" target="_blank" rel="noopener noreferrer"
@@ -519,7 +519,7 @@
             const periods = ['P1', 'P2', 'P3', ...extraPeriods];
             const periodHeading = period => period.startsWith('P') ? `${period.slice(1)}${period === 'P1' ? 'ST' : period === 'P2' ? 'ND' : 'RD'}` : period;
             const goalsInPeriod = (team, period) => timeline.filter(goal => goal.team === team && goal.period === period).length;
-            const stateLabel = data.game_state === 'OFF' ? 'FINAL' : data.game_state === 'LIVE' ? 'LIVE' : 'GAME';
+            const stateLabel = ['FINAL', 'OFF'].includes(data.game_state) ? 'FINAL' : ['LIVE', 'CRIT'].includes(data.game_state) ? 'LIVE' : data.game_state || 'GAME';
             const awayScore = Number(data.away_score) || 0;
             const homeScore = Number(data.home_score) || 0;
 
@@ -695,7 +695,7 @@
             document.querySelectorAll('.roster-drawer').forEach(el => el.style.display = 'none');
             drawer.style.display = 'block';
 
-            if (gameState === 'OFF' || gameState === 'LIVE') {
+            if (['FINAL', 'OFF', 'LIVE', 'CRIT'].includes(gameState)) {
                 const statsBox = document.getElementById(`team-stats-container-${gameId}`);
                 const rosterBox = document.getElementById(`roster-container-${gameId}`);
 
@@ -706,7 +706,7 @@
                 await fetchBoxscoreData(gameId);
 
                 // 💡 LIVE AUTOMATION HOOK: If the game is actively running, auto-refresh the data matrix
-                if (gameState === 'LIVE') {
+                if (['LIVE', 'CRIT'].includes(gameState)) {
                     liveRefreshInterval = setInterval(async () => {
                         await fetchBoxscoreData(gameId);
                     }, 15000); // Poll every 15s to match our sync.py sync timeline

@@ -5,6 +5,7 @@ import time
 import requests
 
 from config import HTTP_HEADERS, MQTT_TOPIC_GOAL, MQTT_TOPIC_SCORE, TEAM_ABBREV
+from game_states import is_live
 from mqtt_publisher import publish_mqtt
 
 
@@ -115,7 +116,7 @@ def process_game_center(game_id):
         current_goal_count = len(scoring_timeline)
         live_score_payload = None
 
-        if game_state == "LIVE":
+        if is_live(game_state):
             home_score = pbp_res.get("homeTeam", {}).get("score", 0)
             away_score = pbp_res.get("awayTeam", {}).get("score", 0)
             current_score_str = f"{away_abbrev} {away_score} - {home_abbrev} {home_score}"

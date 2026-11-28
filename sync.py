@@ -17,6 +17,7 @@ from config import (
     TEAM_ABBREV,
 )
 from game_center import process_game_center
+from game_states import is_completed, is_scheduled, should_fast_poll
 from mqtt_publisher import publish_mqtt
 from time_utils import get_countdown_string, get_seconds_until_game
 
@@ -60,7 +61,7 @@ def run_sync():
                 key=lambda game: game.get("startTimeUTC", ""),
             )
             total_slots = len(web_slots)
-            has_live_game = any(g.get("gameState") == "LIVE" for g in raw_active_slots)
+            has_live_game = any(should_fast_poll(g.get("gameState")) for g in raw_active_slots)
 
             if has_live_game:
                 print("🚨 LIVE GAME DETECTED. Throttling historical updates to save bandwidth!")
@@ -87,13 +88,13 @@ def run_sync():
             # Find the next upcoming game on the tracker
             next_game = None
             for g in raw_active_slots:
-                if g.get("gameState") in ["FUT", "PRE"]:
+                if is_scheduled(g.get("gameState")):
                     next_game = g
                     break
 
-            # If absolutely all matches are OFF, fall back to the last game on the list for reference
+            # If all matches are complete, retain the latest final for reference.
             last_completed_game = None
-            completed_games = [g for g in raw_active_slots if g.get("gameState") == "OFF"]
+            completed_games = [g for g in raw_active_slots if is_completed(g.get("gameState"))]
             if completed_games:
                 last_completed_game = completed_games[-1]
 
@@ -114,11 +115,11 @@ def run_sync():
                     "periodDescriptor": game.get("periodDescriptor", {}),
                 }
 
-                if state == "LIVE":
+                if should_fast_poll(state):
                     print(f"  -> [{idx+1}/{total_slots}] Syncing ACTIVE Game ID: {game_id} ({state})")
                     time.sleep(0.5)
                     game_info["match_metrics"] = process_game_center(game_id)
-                elif state == "OFF":
+                elif is_completed(state):
                     cached_game = cache_map.get(game_id, {})
                     cached_metrics = cached_game.get("match_metrics", {})
 
@@ -131,8 +132,14 @@ def run_sync():
                         print(f"  -> [{idx+1}/{total_slots}] Caching Finished Game ID: {game_id} ({state})")
                         time.sleep(0.5)
                         game_info["match_metrics"] = process_game_center(game_id)
-                else:
+                elif is_scheduled(state):
                     game_info["match_metrics"] = {"stats": [], "timeline": [], "roster": []}
+                else:
+                    # Preserve the last good details for postponed, cancelled,
+                    # and unknown feed states instead of silently erasing them.
+                    game_info["match_metrics"] = cache_map.get(game_id, {}).get(
+                        "match_metrics", {"stats": [], "timeline": [], "roster": []}
+                    )
 
                 compiled_payload_list.append(game_info)
 
@@ -146,7 +153,7 @@ def run_sync():
 
                     # 🔍 NEW: Find the most recently completed game to extract the historical score
                     prev_score_str = "Prev: No Data"
-                    completed_games = [g for g in raw_active_slots if g.get("gameState") == "OFF"]
+                    completed_games = [g for g in raw_active_slots if is_completed(g.get("gameState"))]
                     if completed_games:
                         last_g = completed_games[-1]
                         lg_home = last_g.get("homeTeam", {})

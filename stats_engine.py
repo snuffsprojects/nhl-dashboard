@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from config import TEAM_ABBREV
+from game_states import is_completed
 
 
 def _game_record(game):
@@ -111,7 +112,7 @@ def build_season_stats(games):
     completed = sorted(
         (
             _game_record(game) for game in games
-            if game.get("gameState") == "OFF" and game.get("gameType") in (2, 3)
+            if is_completed(game.get("gameState")) and game.get("gameType") in (2, 3)
         ),
         key=lambda record: record["date"],
     )
